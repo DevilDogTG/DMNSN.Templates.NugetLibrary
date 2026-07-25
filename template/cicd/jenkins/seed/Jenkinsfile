@@ -1,0 +1,73 @@
+// SEED job pipeline for this library.
+//
+// It builds nothing. It applies every cicd/jenkins/jobs/**/*.groovy file in THIS repo via the Job
+// DSL plugin, creating or updating the real Jenkins jobs - which then each run
+// cicd/jenkins/Jenkinsfile.
+//
+// This repo owns its own jobs (the modular model): the job definitions, the seed job that applies
+// them, and the pipeline they run all live here and ship together. Nothing is copied into
+// DMNSN.IaC.Jenkins. The cost is a one-time manual bootstrap per repo - see README.md.
+//
+// Runs on the 'docker-builder' agent pod purely to get a workspace + git. The jobDsl step talks to
+// the Jenkins controller's job API directly and never touches the 'kaniko' container, which is why
+// this does not need the dotnet builder image the build pipeline uses.
+pipeline {
+    agent {
+        label 'docker-builder'
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+        disableConcurrentBuilds()
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '20'
+            )
+        )
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Apply Job DSL') {
+            steps {
+                // targets is scoped to this repo's own jobs directory, and must stay that way. A
+                // wider glob is how one repo's seed job starts reconfiguring another repo's jobs.
+                //
+                // removedJobAction IGNORE: a job whose .groovy file is deleted is left alone in
+                // Jenkins rather than auto-deleted. Switching to DELETE makes this seed job
+                // authoritative enough to destroy job history, so it is a deliberate decision.
+                //
+                // sandbox true requires the authorize-project plugin AND a build authorization
+                // identity on this job - see README.md step 4. Without it the build fails
+                // immediately complaining the script is not approved.
+                jobDsl(
+                    targets: 'cicd/jenkins/jobs/**/*.groovy',
+                    removedJobAction: 'IGNORE',
+                    removedViewAction: 'IGNORE',
+                    sandbox: true
+                )
+            }
+        }
+
+        // Deliberately NO 'Update System Message' stage. The controller has one global system
+        // message; with one seed job per repo, every one of them writing to it would mean the last
+        // build to run anywhere wins. That message belongs to whichever repo owns the controller's
+        // presentation, not to an application repo.
+    }
+
+    post {
+        success {
+            echo 'Job definitions applied. Check this build\'s console output for the per-file Job DSL summary.'
+        }
+        failure {
+            echo 'Job DSL failed to apply - the console output above names the offending .groovy file and line.'
+            echo 'If it mentions script approval or a missing user identity, re-check README.md step 4 (authorize-project).'
+        }
+    }
+}

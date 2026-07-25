@@ -1,14 +1,16 @@
 // Release job for this library.
 //
-// DRAFT - NOT LIVE, and it has TODOs. Jenkins applies job definitions only from the seed job in
-// DMNSN.IaC.Jenkins, which globs `jobs/**/*.groovy` in THAT repo. To activate:
+// NOT LIVE YET, and it has TODOs. A job definition only reaches Jenkins when a seed job applies it.
+// This repo carries its own seed job - see ../seed/README.md. To activate:
 //
-//   1. Fill in the TODOs below (repo owner/name, and the App folder this library belongs under).
-//   2. Copy to DMNSN.IaC.Jenkins/jobs/DMNSN/<App>/<component>_release.groovy
-//      Rename the file to your component: lowercase, underscores only - NO dots and NO hyphens.
-//      Job DSL derives a Groovy class name from the filename, and neither is valid there.
-//      e.g. DMNSN.Templates.NugetLibrary -> dmnsn_templates_nugetlibrary_release.groovy
-//   3. Let the seed job run.
+//   1. Fill in the TODOs below (repo owner/name, and the folder this library belongs under).
+//      ../jobs/library_develop.groovy must use the SAME folder, or the pair splits in two.
+//   2. Complete the one-time bootstrap in ../seed/README.md.
+//   3. Re-run the seed job after any change to this file - editing it alone does nothing.
+//
+// Filenames here take lowercase and underscores ONLY - no dots, no hyphens. Job DSL derives a Groovy
+// class name from the filename and neither is valid in one. So a project named Foo.Bar.Baz would use
+// foo_bar_baz_release.groovy. The Jenkins job NAME below can contain dots freely.
 //
 // Tag discovery only - builds exactly when a tag matching vX.Y.Z is pushed. Runs this repo's
 // cicd/jenkins/Jenkinsfile, which reads env.TAG_NAME to tell this apart from a develop build,

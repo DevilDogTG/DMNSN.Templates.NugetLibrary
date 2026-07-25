@@ -1,7 +1,7 @@
 // Develop job for this library.
 //
-// DRAFT - NOT LIVE, and it has TODOs. See library_release.groovy's header for the activation steps
-// and the filename rules (lowercase, underscores only - no dots, no hyphens).
+// NOT LIVE YET, and it has TODOs. See library_release.groovy's header for the activation steps and
+// the filename rules, and ../seed/README.md for the one-time bootstrap that applies this file.
 //
 // Branch discovery only - builds on every push to a branch matching the filter below. Runs this
 // repo's cicd/jenkins/Jenkinsfile, which reads env.BRANCH_NAME to tell this apart from a release
