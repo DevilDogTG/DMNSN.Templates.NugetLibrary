@@ -50,10 +50,22 @@
 
 	<ItemGroup>
 		<!--
-		  The whole template body, verbatim. bin/obj are excluded so a local test build of
-		  template/src does not leak compiled output into the published template.
+		  The whole template body, verbatim, minus local working state.
+
+		  The exclusions are not housekeeping - each one is something that WOULD otherwise be
+		  published inside the template and scaffolded into every new library:
+		    bin/obj      compiled output from a local test build of template/src
+		    .vs          Visual Studio writes this INSIDE template/ once it opens the .slnx that
+		                 lives there. Its files are also locked while devenv runs, so packing
+		                 fails outright with "being used by another process".
+		    .git         if anyone ever initialises a repo inside the body
+		    *.user       per-developer project settings
+		  NoDefaultExcludes=true above disables NuGet's own filtering, so nothing else screens
+		  these out - this glob is the only line of defence, backed by the assertion in
+		  VerifyTemplateContent below.
 		-->
-		<Content Include="template\**\*" Exclude="template\**\bin\**;template\**\obj\**" />
+		<Content Include="template\**\*"
+		         Exclude="template\**\bin\**;template\**\obj\**;template\**\.vs\**;template\**\.git\**;template\**\*.user" />
 
 		<!-- Package-level icon and readme (root of the .nupkg, not part of the template body). -->
 		<None Include="template\logo.png" Pack="true" PackagePath="\" Visible="false" />
@@ -85,6 +97,13 @@
 			<_PackedTemplateJson Include="$(_PackVerifyDir)**\.template.config\template.json" />
 			<_PackedIdeHost Include="$(_PackVerifyDir)**\.template.config\ide.host.json" />
 			<_PackedGitignore Include="$(_PackVerifyDir)**\template\.gitignore" />
+
+			<!-- Local working state that must never reach a scaffolded library. -->
+			<_PackedJunk Include="$(_PackVerifyDir)**\.vs\**" />
+			<_PackedJunk Include="$(_PackVerifyDir)**\.git\**" />
+			<_PackedJunk Include="$(_PackVerifyDir)**\bin\**" />
+			<_PackedJunk Include="$(_PackVerifyDir)**\obj\**" />
+			<_PackedJunk Include="$(_PackVerifyDir)**\*.user" />
 		</ItemGroup>
 
 		<Error Condition="'@(_PackedTemplateJson)' == ''"
@@ -94,7 +113,10 @@
 		<Error Condition="'@(_PackedGitignore)' == ''"
 		       Text="Template pack is missing template/.gitignore - every scaffolded library would start with no gitignore. Most likely cause: NoDefaultExcludes is not true, which makes NuGet drop dot-prefixed files." />
 
-		<Message Importance="high" Text="Template pack verified: .template.config/ and .gitignore are present in $(PackageId).$(PackageVersion).nupkg" />
+		<Error Condition="'@(_PackedJunk)' != ''"
+		       Text="Template pack contains local working state that would be scaffolded into every new library: @(_PackedJunk->'%(RecursiveDir)%(Filename)%(Extension)', ', '). Widen the Exclude on the Content glob above." />
+
+		<Message Importance="high" Text="Template pack verified: .template.config/ and .gitignore present, no local working state, in $(PackageId).$(PackageVersion).nupkg" />
 
 		<RemoveDir Directories="$(_PackVerifyDir)" />
 	</Target>

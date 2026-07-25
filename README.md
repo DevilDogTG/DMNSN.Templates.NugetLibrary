@@ -76,6 +76,7 @@ This repo is the template *pack*, not a library. The distinction matters when ed
 /
 ├── DMNSN.Templates.NugetLibrary.Template.csproj   packages template/ — compiles nothing
 ├── cicd/jenkins/Jenkinsfile                       publishes this pack
+├── cicd/jenkins/jobs/                             Job DSL drafts — NOT live, see its README
 ├── docs/adr/                                      why this is built the way it is
 ├── CLAUDE.md · GEMINI.md · .codexrules · .github/ agent instructions — repo root only
 └── template/                                      ← exactly what `dotnet new` emits
