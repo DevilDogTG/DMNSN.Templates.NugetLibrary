@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- xUnit v3 test projects are executables, not libraries. -->
+		<OutputType>Exe</OutputType>
+
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="xunit.v3" Version="3.2.2" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\DMNSN.Templates.NugetLibrary\DMNSN.Templates.NugetLibrary.csproj" />
+	</ItemGroup>
+
+</Project>
