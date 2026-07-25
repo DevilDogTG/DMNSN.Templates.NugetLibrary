@@ -1,0 +1,102 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+	  Packaging project for the `dmnsn-lib` dotnet new template.
+	  This project compiles nothing. Its only job is to zip template/ into a NuGet package of
+	  PackageType=Template. The library that developers actually build lives in
+	  template/src/ and is never referenced from here.
+	-->
+
+	<PropertyGroup>
+		<PackageId>DMNSN.Templates.NugetLibrary</PackageId>
+		<PackageType>Template</PackageType>
+		<Version>1.0.0</Version>
+		<Title>DMNSN NuGet Library Template</Title>
+		<Description>dotnet new template for a DMNSN class library laid out for NuGet publication: src/, test/ (xUnit v3) and cicd/ with a ready-to-edit Jenkins pipeline.</Description>
+		<Authors>DevilDogTG</Authors>
+		<Company>DevDogs</Company>
+		<Copyright>Copyright (c) 2025 DevDogs</Copyright>
+		<PackageTags>dotnet-new;templates;nuget;library;dmnsn</PackageTags>
+		<PackageIcon>logo.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
+		<TargetFramework>net10.0</TargetFramework>
+
+		<!--
+		  The four properties below are load-bearing. Removing any one of them still produces a
+		  .nupkg that installs without error, but scaffolds a broken project — which is why the
+		  VerifyTemplateContent target at the bottom of this file exists.
+
+		  NoDefaultExcludes    NuGet drops dot-prefixed FILES from a package by default. Verified
+		                       empirically by packing with -p:NoDefaultExcludes=false: template/
+		                       .gitignore disappears, while .template.config/*.json survives (the
+		                       exclusion matches the leaf filename, so files inside a dot-prefixed
+		                       directory are kept as long as their own names do not start with a
+		                       dot). Without this property every scaffolded library ships with no
+		                       .gitignore.
+		  EnableDefaultItems   Otherwise this project globs and compiles template/src/**/*.cs,
+		                       building the template body as if it were its own source.
+		  IncludeBuildOutput   A template pack has no lib/ folder; NU5128 is the matching warning.
+		-->
+		<NoDefaultExcludes>true</NoDefaultExcludes>
+		<EnableDefaultItems>false</EnableDefaultItems>
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+		<NoWarn>$(NoWarn);NU5128</NoWarn>
+
+		<IncludeContentInPack>true</IncludeContentInPack>
+		<ContentTargetFolders>content</ContentTargetFolders>
+		<SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!--
+		  The whole template body, verbatim. bin/obj are excluded so a local test build of
+		  template/src does not leak compiled output into the published template.
+		-->
+		<Content Include="template\**\*" Exclude="template\**\bin\**;template\**\obj\**" />
+
+		<!-- Package-level icon and readme (root of the .nupkg, not part of the template body). -->
+		<None Include="template\logo.png" Pack="true" PackagePath="\" Visible="false" />
+		<None Include="README.md" Pack="true" PackagePath="\" Visible="false" />
+	</ItemGroup>
+
+	<!--
+	  Fails the build if the packed template is missing the files that make it a template.
+	  Deliberately an MSBuild target rather than a CI stage: a pipeline check is a convention
+	  someone can forget and only fires after a push, whereas this makes a broken pack impossible
+	  to produce anywhere - local or CI - because it is the project itself that fails.
+
+	  Paths are matched by glob rather than hardcoded, since ContentTargetFolders places the body
+	  at content/template/ and that prefix is an implementation detail of this file.
+	-->
+	<Target Name="VerifyTemplateContent" AfterTargets="Pack">
+		<PropertyGroup>
+			<_PackVerifyDir>$(IntermediateOutputPath)packverify\</_PackVerifyDir>
+			<_PackVerifyNupkg>$(PackageOutputPath)$(PackageId).$(PackageVersion).nupkg</_PackVerifyNupkg>
+		</PropertyGroup>
+
+		<Error Condition="!Exists('$(_PackVerifyNupkg)')"
+		       Text="Expected package not found at $(_PackVerifyNupkg) - cannot verify template content." />
+
+		<RemoveDir Directories="$(_PackVerifyDir)" />
+		<Unzip SourceFiles="$(_PackVerifyNupkg)" DestinationFolder="$(_PackVerifyDir)" />
+
+		<ItemGroup>
+			<_PackedTemplateJson Include="$(_PackVerifyDir)**\.template.config\template.json" />
+			<_PackedIdeHost Include="$(_PackVerifyDir)**\.template.config\ide.host.json" />
+			<_PackedGitignore Include="$(_PackVerifyDir)**\template\.gitignore" />
+		</ItemGroup>
+
+		<Error Condition="'@(_PackedTemplateJson)' == ''"
+		       Text="Template pack is missing .template.config/template.json - without it this package is not a template at all and 'dotnet new install' will report no templates. Check the Content include glob above." />
+		<Error Condition="'@(_PackedIdeHost)' == ''"
+		       Text="Template pack is missing .template.config/ide.host.json - the Visual Studio New Project dialog will fall back to a generic icon and parameter rendering." />
+		<Error Condition="'@(_PackedGitignore)' == ''"
+		       Text="Template pack is missing template/.gitignore - every scaffolded library would start with no gitignore. Most likely cause: NoDefaultExcludes is not true, which makes NuGet drop dot-prefixed files." />
+
+		<Message Importance="high" Text="Template pack verified: .template.config/ and .gitignore are present in $(PackageId).$(PackageVersion).nupkg" />
+
+		<RemoveDir Directories="$(_PackVerifyDir)" />
+	</Target>
+
+</Project>
