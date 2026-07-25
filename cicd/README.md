@@ -25,33 +25,31 @@ A change to a lower layer has no effect until the layer above runs. Editing `job
 nothing until the seed job runs; that is the most common cause of "I changed the filter and nothing
 happened".
 
-## Choose one seeding model — not both
+## Seeding: local, per repository
 
-The job definitions in `jenkins/jobs/` can reach Jenkins two ways, and **they are mutually
-exclusive**.
+**This repo seeds its own jobs.** Create a seed job for it per
+[`jenkins/seed/README.md`](jenkins/seed/README.md); nothing is copied into `DMNSN.IaC.Jenkins`. The
+same arrangement ships inside the template, so every scaffolded library is self-contained too — the
+modular model, chosen deliberately over central registration.
 
-### Central (the established DMNSN convention)
+Why: a branch filter and a `scriptPath` only mean anything against a specific `Jenkinsfile`. Keeping
+them in the same repo means one copy of each file and a filter change shipping in the same commit as
+the pipeline change it belongs with.
 
-Copy `jenkins/jobs/*.groovy` into `DMNSN.IaC.Jenkins/jobs/DMNSN/Templates/` and let that repo's
-existing seed job apply them. Nothing in `jenkins/seed/` is used.
+Accepted cost: **one hand-bootstrapped seed job per repository**, and no single place listing every job
+on the controller. Create a shared `_seeds` folder in Jenkins and put every repo's seed job in it, or
+the root fills up with seed jobs interleaved with real ones.
 
-- One seed job for the whole controller, one place to audit every job that exists.
-- Matches `DMNSN.IaC.Jenkins`'s stated boundary: it owns *which jobs exist*, application repos own
-  *what a build does*.
-- Cost: two copies of each `.groovy` file with nothing keeping them in sync. Treat the copy in
-  `DMNSN.IaC.Jenkins` as authoritative and mirror changes back here in the same commit.
+### The central alternative
 
-### Local (self-contained)
+Job definitions can instead be copied into `DMNSN.IaC.Jenkins/jobs/DMNSN/Templates/` and applied by its
+single controller-wide seed job — the older convention, and it does give one place to audit every job.
+`jenkins/jobs/README.md` documents that route, since the files are ready to copy either way.
 
-Create a seed job for this repo per [`jenkins/seed/README.md`](jenkins/seed/README.md). Nothing is
-copied anywhere.
+Its cost is the mirror image: two copies of each `.groovy` file with nothing keeping them in sync. If
+you go that way, treat the copy in `DMNSN.IaC.Jenkins` as authoritative.
 
-- The repo owns its jobs outright: one file, no drift, and a filter change ships in the same commit as
-  the pipeline change it belongs with.
-- Cost: N repos means N seed jobs to bootstrap by hand, and no single place lists every job on the
-  controller. It also works against the boundary above.
-
-### Why not both
+### Never both
 
 Both models declare the same job paths (`DMNSN/Templates/nugetlibrary/{release,develop}`). Run both
 and each seed job reconfigures the other's jobs on every build. While the two `.groovy` copies stay

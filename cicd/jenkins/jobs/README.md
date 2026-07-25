@@ -1,21 +1,23 @@
-# Job DSL drafts
+# Job DSL definitions
 
 These `.groovy` files declare the two Jenkins jobs that run `../Jenkinsfile`.
 
-## They are not live
+## They do nothing until a seed job applies them
 
-A job definition only reaches Jenkins when a **seed job** applies it. There are two ways to arrange
-that, they are **mutually exclusive**, and [`../../README.md`](../../README.md) compares them — read
-that before picking. In short:
+**This repo uses local seeding**: create a seed job for it per
+[`../seed/README.md`](../seed/README.md), which applies `cicd/jenkins/jobs/**/*.groovy` in place. These
+files are the source of truth — nothing is copied anywhere.
 
-- **Central**: copy these files into `DMNSN.IaC.Jenkins` and let its existing seed job apply them.
-- **Local**: create a seed job for this repo, per [`../seed/README.md`](../seed/README.md), which
-  applies `cicd/jenkins/jobs/**/*.groovy` directly. Nothing gets copied.
+Editing them has **no effect until that seed job runs again**.
 
-Running both makes two seed jobs reconfigure the same jobs on every build — invisible while the copies
-match, then a filter that "sometimes" works once they diverge.
+## The central alternative
 
-The rest of this section covers the **central** route. To activate a job that way, copy it across:
+These same definitions can instead be applied by the controller-wide seed job in `DMNSN.IaC.Jenkins`,
+which is the older convention. `../../README.md` compares the two. **Doing both breaks things** — two
+seed jobs would declare the same job paths and reconfigure each other on every build, invisibly while
+the copies match, then as a filter that "sometimes" works once they diverge.
+
+To go that route instead, copy the files across:
 
 ```text
 cicd/jenkins/jobs/nugetlibrary_release.groovy

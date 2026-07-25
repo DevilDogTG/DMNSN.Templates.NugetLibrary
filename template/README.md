@@ -39,14 +39,23 @@ Console.WriteLine("hello world".ToTitleCase()); // Hello World
 
 ## Wiring up Jenkins
 
-`cicd/jenkins/jobs/` holds a `release`/`develop` Job DSL pair for this library. **They are drafts and
-are not live**: Jenkins only applies job definitions from the seed job in `DMNSN.IaC.Jenkins`. Each
-file's header lists the TODOs to fill in (repository owner/name, the folder this library belongs
-under) and where to copy it. Note the filename rule — lowercase and underscores only, no dots or
-hyphens, because Job DSL derives a Groovy class name from it.
+This repository owns its own Jenkins jobs — definitions, seed job and pipeline all ship here, nothing
+is registered centrally.
 
-Both jobs point at the same `cicd/jenkins/Jenkinsfile`; it distinguishes a tag build from a branch
-build itself.
+**Start with [`cicd/jenkins/seed/README.md`](cicd/jenkins/seed/README.md).** Until that one-time
+bootstrap is done, none of `cicd/` runs. In short: fill in the TODOs in `cicd/jenkins/jobs/*.groovy`
+(repository owner/name, and the Jenkins folder this library sits under), then create one Pipeline job
+pointing at `cicd/jenkins/seed/Jenkinsfile`.
+
+[`cicd/README.md`](cicd/README.md) explains the three layers and why this is self-contained rather than
+centrally registered. Two rules worth knowing up front:
+
+- **Editing `cicd/jenkins/jobs/*.groovy` does nothing until the seed job runs again.**
+- Job DSL filenames take lowercase and underscores only — no dots, no hyphens — because it derives a
+  Groovy class name from the filename. Rename `library_*.groovy` accordingly if you move them.
+
+Both jobs point at the same `cicd/jenkins/Jenkinsfile`; it distinguishes a tag build from a branch build
+itself.
 
 ## Building and testing
 

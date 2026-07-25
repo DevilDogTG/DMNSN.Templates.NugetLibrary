@@ -120,10 +120,8 @@ was built for a second feed that does not exist yet.
 - Harbor pull access from the `jenkins` namespace: either anonymous pull on the `build-images`
   project, or a `kubernetes.io/dockerconfigjson` secret plus uncommenting `imagePullSecrets`.
 - The `nuget-api-key` Jenkins credential.
-- **Copying the Job DSL pair into `DMNSN.IaC.Jenkins`.** Drafted in `cicd/jenkins/jobs/` (and, for
-  scaffolded libraries, in the template body) rather than authored there directly — the seed job
-  globs only its own repo, so nothing here is live until copied. This deliberately accepts a
-  two-copy drift risk in exchange for reviewing branch filters and `scriptPath` in the same pull
-  request as the Jenkinsfile they point at, so the two cannot silently disagree. Treat the copy in
-  `DMNSN.IaC.Jenkins` as authoritative once it exists. See `cicd/jenkins/jobs/README.md`.
+- ~~Copying the Job DSL pair into `DMNSN.IaC.Jenkins`~~ — **superseded by
+  [ADR 0003](0003-per-repo-seed-jobs.md)**, which gives this repo and every scaffolded library its own
+  seed job instead, removing the two-copy drift risk this follow-up originally accepted. The remaining
+  work is the one-time seed-job bootstrap in `cicd/jenkins/seed/README.md`.
 - Code coverage, which needs a `coverlet.collector` reference and a plugin able to display it.
