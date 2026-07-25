@@ -28,14 +28,19 @@ Acme.Widgets/
 | Parameter | Default | Effect |
 |---|---|---|
 | `-n`, `--name` | `DMNSN.Library1` | Renames the folder, projects, namespaces and solution |
-| `--skip-cicd` | `false` | Omits `cicd/` entirely, for libraries not published through Jenkins |
+| `-s`, `--skipCicd` | `false` | Omits `cicd/` entirely, for libraries not published through Jenkins |
 
 ```bash
-dotnet new dmnsn-lib -n Acme.Widgets --skip-cicd
+dotnet new dmnsn-lib -n Acme.Widgets --skipCicd
 ```
 
+The flag is `--skipCicd`, not `--skip-cicd`: `dotnet new` derives CLI option names verbatim from the
+symbol names in `template.json` and does not kebab-case them. Renaming the symbol to `skip-cicd`
+would fix the flag but break `template.json`'s own conditions, where `(skip-cicd)` parses as
+subtraction.
+
 The template also appears in the Visual Studio **New Project** dialog once installed, with
-`--skip-cicd` rendered as a checkbox.
+`skipCicd` rendered as a labelled checkbox.
 
 ## Versioning in a scaffolded library
 
