@@ -1,11 +1,19 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+		<!--
+		  The single source of truth for this package's version. Bump it by hand per SemVer.
+		  The pipeline derives everything else: a develop build publishes <Version>-dev.<BUILD_NUMBER>,
+		  and a vX.Y.Z tag build publishes <Version> after asserting the tag matches this value.
+		  CI never edits this file.
+		-->
 		<Version>1.0.0</Version>
-		<Copyright>Copyright 2025 @ DevDogs</Copyright>
+
 		<Authors>DevilDogTG</Authors>
 		<Company>DevDogs</Company>
 		<Description>Class library project template</Description>
@@ -32,5 +40,69 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
 	</ItemGroup>
+
+	<!--
+	  ==========================================================================================
+	  TEMPORARY WORKAROUND - delete this whole block once NuGet selects analyzers correctly.
+	  ==========================================================================================
+
+	  Symptom without it: any use of [LoggerMessage] fails to compile with CS0102 / CS0757 /
+	  CS0759 ("already contains a definition", "multiple implementing declarations"), pointing at
+	  generated code that looks perfectly correct on disk.
+
+	  Cause: a NuGet package may ship its analyzer once per Roslyn version
+	  (analyzers/dotnet/roslyn3.11/, roslyn4.0/, roslyn4.4/ ...) and NuGet is meant to pass
+	  exactly one of them to the compiler. When the SDK's Roslyn is NEWER than every folder the
+	  package ships, that selection fails open and ALL of them are passed. Each copy of the
+	  generator then emits the same source, so every generated member is declared 2-3 times.
+
+	  Observed on SDK 10.0.302: CompilerApiVersion is roslyn5.6, while
+	  Microsoft.Extensions.Logging.Abstractions 10.0.10 ships nothing above roslyn4.4, and csc
+	  received three /analyzer: switches for Microsoft.Extensions.Logging.Generators.dll.
+	  Reproduces on a stock `dotnet new classlib` + the same package, so it is a toolchain bug,
+	  not a defect in this library. Setting CompilerApiVersion explicitly does not help, even
+	  with a forced restore.
+
+	  Fix below: group the Roslyn-versioned analyzers by filename and keep only the highest
+	  version in each group - which is what NuGet should have done. Grouping is per filename on
+	  purpose: a global maximum would silently delete a single-folder analyzer from an unrelated
+	  package that happens to ship an older Roslyn baseline.
+	-->
+	<Target Name="_CollectRoslynVersionedAnalyzers">
+		<ItemGroup>
+			<_RoslynVersionedAnalyzer Include="@(Analyzer)"
+			                          Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '[\\/]roslyn[0-9]+\.[0-9]+[\\/]'))">
+				<AnalyzerName>%(Filename)%(Extension)</AnalyzerName>
+				<RoslynVersion>$([System.Text.RegularExpressions.Regex]::Match('%(Identity)', '[\\/]roslyn([0-9]+\.[0-9]+)[\\/]').Groups[1].Value)</RoslynVersion>
+			</_RoslynVersionedAnalyzer>
+		</ItemGroup>
+	</Target>
+
+	<!--
+	  Outputs="%(...AnalyzerName)" batches this target: it runs once per distinct analyzer
+	  filename, with @(_RoslynVersionedAnalyzer) scoped to that group. Inside, the batched
+	  CreateProperty walks the group's versions one at a time to find the maximum - MSBuild has
+	  no Max() over items, and VersionGreaterThan is used rather than a string or numeric compare
+	  because roslyn4.14 must beat roslyn4.4 (numerically it would lose).
+	-->
+	<Target Name="RemoveDuplicateRoslynAnalyzers"
+	        BeforeTargets="CoreCompile"
+	        DependsOnTargets="_CollectRoslynVersionedAnalyzers"
+	        Outputs="%(_RoslynVersionedAnalyzer.AnalyzerName)">
+
+		<PropertyGroup>
+			<_MaxRoslynVersion />
+		</PropertyGroup>
+
+		<CreateProperty Value="%(_RoslynVersionedAnalyzer.RoslynVersion)"
+		                Condition="'$(_MaxRoslynVersion)' == '' Or $([MSBuild]::VersionGreaterThan('%(_RoslynVersionedAnalyzer.RoslynVersion)', '$(_MaxRoslynVersion)'))">
+			<Output TaskParameter="Value" PropertyName="_MaxRoslynVersion" />
+		</CreateProperty>
+
+		<ItemGroup>
+			<Analyzer Remove="@(_RoslynVersionedAnalyzer)"
+			          Condition="$([MSBuild]::VersionLessThan('%(_RoslynVersionedAnalyzer.RoslynVersion)', '$(_MaxRoslynVersion)'))" />
+		</ItemGroup>
+	</Target>
 
 </Project>

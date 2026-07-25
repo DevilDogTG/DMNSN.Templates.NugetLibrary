@@ -1,3 +1,8 @@
 <Solution>
-  <Project Path="src/DMNSN.Templates.NugetLibrary/DMNSN.Templates.NugetLibrary.csproj" Id="234e4fa5-8c55-4cfe-bf92-774611323e7d" />
+  <Folder Name="/src/">
+    <Project Path="src/DMNSN.Templates.NugetLibrary/DMNSN.Templates.NugetLibrary.csproj" Id="234e4fa5-8c55-4cfe-bf92-774611323e7d" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/DMNSN.Templates.NugetLibrary.Tests/DMNSN.Templates.NugetLibrary.Tests.csproj" />
+  </Folder>
 </Solution>

@@ -2,6 +2,12 @@
 
 namespace DMNSN.Templates.NugetLibrary;
 
+/// <summary>
+/// Example service showing the two patterns this template sets up: constructor-injected
+/// logging, and high-performance source-generated log messages (see Example.LogMessages.cs).
+/// Replace it with your own types.
+/// </summary>
+/// <param name="logger">Logger used to record calls.</param>
 public partial class Example(
     ILogger<Example> logger)
 {
