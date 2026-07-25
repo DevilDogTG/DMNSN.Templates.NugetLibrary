@@ -32,8 +32,21 @@ Console.WriteLine("hello world".ToTitleCase()); // Hello World
 ```text
 ├── src/DMNSN.Templates.NugetLibrary/         the library
 ├── test/DMNSN.Templates.NugetLibrary.Tests/  xUnit v3
-└── cicd/jenkins/Jenkinsfile                  build → test → pack → publish
+└── cicd/jenkins/
+    ├── Jenkinsfile                           build → test → pack → publish
+    └── jobs/                                 Job DSL drafts (see below)
 ```
+
+## Wiring up Jenkins
+
+`cicd/jenkins/jobs/` holds a `release`/`develop` Job DSL pair for this library. **They are drafts and
+are not live**: Jenkins only applies job definitions from the seed job in `DMNSN.IaC.Jenkins`. Each
+file's header lists the TODOs to fill in (repository owner/name, the folder this library belongs
+under) and where to copy it. Note the filename rule — lowercase and underscores only, no dots or
+hyphens, because Job DSL derives a Groovy class name from it.
+
+Both jobs point at the same `cicd/jenkins/Jenkinsfile`; it distinguishes a tag build from a branch
+build itself.
 
 ## Building and testing
 

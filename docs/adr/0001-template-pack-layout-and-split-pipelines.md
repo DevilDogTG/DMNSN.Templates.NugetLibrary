@@ -120,9 +120,10 @@ was built for a second feed that does not exist yet.
 - Harbor pull access from the `jenkins` namespace: either anonymous pull on the `build-images`
   project, or a `kubernetes.io/dockerconfigjson` secret plus uncommenting `imagePullSecrets`.
 - The `nuget-api-key` Jenkins credential.
-- The release/develop Job DSL pair in `DMNSN.IaC.Jenkins`, filters `^v\d+\.\d+\.\d+$` and
-  `^(feature/.*|bugfix/.*)$`. No component scoping is needed — unlike `BuildImages`, this repo hosts
-  one component. The release job needs
-  `buildStrategies { buildTags { atLeastDays('-1') atMostDays('-1') } }`; branch-api does not
-  auto-build tags by default.
+- **Copying the Job DSL pair into `DMNSN.IaC.Jenkins`.** Drafted in `cicd/jenkins/jobs/` (and, for
+  scaffolded libraries, in the template body) rather than authored there directly — the seed job
+  globs only its own repo, so nothing here is live until copied. This deliberately accepts a
+  two-copy drift risk in exchange for reviewing branch filters and `scriptPath` in the same pull
+  request as the Jenkinsfile they point at, so the two cannot silently disagree. Treat the copy in
+  `DMNSN.IaC.Jenkins` as authoritative once it exists. See `cicd/jenkins/jobs/README.md`.
 - Code coverage, which needs a `coverlet.collector` reference and a plugin able to display it.
