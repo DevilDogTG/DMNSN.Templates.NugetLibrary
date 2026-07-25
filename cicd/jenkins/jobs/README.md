@@ -4,9 +4,18 @@ These `.groovy` files declare the two Jenkins jobs that run `../Jenkinsfile`.
 
 ## They are not live
 
-Jenkins applies job definitions from exactly one place: the **seed job** in `DMNSN.IaC.Jenkins`,
-which runs `jobDsl` over `jobs/**/*.groovy` **in that repo**. Nothing under this directory is read by
-Jenkins, ever. To activate a job here, copy it across:
+A job definition only reaches Jenkins when a **seed job** applies it. There are two ways to arrange
+that, they are **mutually exclusive**, and [`../../README.md`](../../README.md) compares them — read
+that before picking. In short:
+
+- **Central**: copy these files into `DMNSN.IaC.Jenkins` and let its existing seed job apply them.
+- **Local**: create a seed job for this repo, per [`../seed/README.md`](../seed/README.md), which
+  applies `cicd/jenkins/jobs/**/*.groovy` directly. Nothing gets copied.
+
+Running both makes two seed jobs reconfigure the same jobs on every build — invisible while the copies
+match, then a filter that "sometimes" works once they diverge.
+
+The rest of this section covers the **central** route. To activate a job that way, copy it across:
 
 ```text
 cicd/jenkins/jobs/nugetlibrary_release.groovy
@@ -19,7 +28,7 @@ cicd/jenkins/jobs/nugetlibrary_develop.groovy
 Then let the seed job run (`main` → `jenkins.dmnsn.com`, `feature/*`/`bugfix/*` →
 `jenkins.uat.dmnsn.com`).
 
-## The tradeoff of drafting them here
+## The tradeoff, if you go central
 
 `DMNSN.IaC.Jenkins`'s own boundary is that it owns *which jobs exist* and nothing else — build logic
 stays in each application's repo. Job definitions are the part it deliberately does own, so keeping
@@ -30,8 +39,11 @@ the pipeline it launches, so branch filters and `scriptPath` cannot silently dis
 Jenkinsfile they point at.
 
 To keep it honest, treat the copy in `DMNSN.IaC.Jenkins` as authoritative. If you change a filter
-there, mirror it back here in the same change — or delete these drafts once the jobs are live and
-stop pretending they are the source.
+there, mirror it back here in the same change — or delete these files once the jobs are live and stop
+pretending they are the source.
+
+The **local** model has no such tradeoff: these files *are* the source, and the seed job in `../seed/`
+applies them in place. It costs a per-repo manual bootstrap instead.
 
 ## What each job does
 
