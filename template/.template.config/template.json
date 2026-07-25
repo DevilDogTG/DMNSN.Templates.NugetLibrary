@@ -20,7 +20,8 @@
       "datatype": "bool",
       "defaultValue": "false",
       "displayName": "Skip CI/CD pipeline",
-      "description": "Do not scaffold cicd/jenkins/Jenkinsfile. Use for libraries that will not be published through Jenkins."
+      "description": "Do not scaffold cicd/jenkins/Jenkinsfile. Use for libraries that will not be published through Jenkins.",
+      "shortName": "s"
     }
   },
   "sources": [
