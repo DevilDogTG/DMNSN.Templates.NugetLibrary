@@ -1,0 +1,268 @@
+// Publishes THIS repository's dotnet new template pack (DMNSN.Templates.NugetLibrary).
+//
+// This is not the pipeline a scaffolded library gets - that one lives at
+// template/cicd/jenkins/Jenkinsfile and is what `dotnet new dmnsn-lib` emits. The two are separate
+// on purpose: a template pack is a zip of files, so `dotnet build` and `dotnet test` are
+// meaningless on it. Serving both roles from one file would mean guarding every stage, and would
+// hand developers a pipeline polluted with template-publishing logic. They share conventions
+// (inline pod agent, -dev.<BUILD_NUMBER> versioning, tag-vs-branch build kinds, feed env vars),
+// which are cheap to repeat across two short files.
+//
+// Declared by a release/develop job pair in the DMNSN.IaC.Jenkins repo, same as every other DMNSN
+// component: release discovers only `vX.Y.Z` tags, develop only `feature/*` / `bugfix/*` branches.
+pipeline {
+    agent {
+        kubernetes {
+            defaultContainer 'dotnet'
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  # See template/cicd/jenkins/Jenkinsfile for why harbor-build-images-credentials cannot be
+  # reused as an imagePullSecret. Uncomment if the Harbor project requires authentication.
+  # imagePullSecrets:
+  #   - name: harbor-pull-credentials
+  containers:
+    - name: dotnet
+      image: harbor.dmnsn.com/build-images/dotnet10-sdk:latest
+      command: ['cat']
+      tty: true
+      resources:
+        requests:
+          cpu: '500m'
+          memory: '1Gi'
+        limits:
+          cpu: '2'
+          memory: '4Gi'
+      env:
+        - name: DOTNET_CLI_TELEMETRY_OPTOUT
+          value: '1'
+        - name: DOTNET_NOLOGO
+          value: '1'
+        - name: NUGET_PACKAGES
+          value: /home/jenkins/agent/.nuget/packages
+      volumeMounts:
+        - name: nuget-cache
+          mountPath: /home/jenkins/agent/.nuget/packages
+  volumes:
+    - name: nuget-cache
+      emptyDir: {}
+'''
+        }
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+        disableConcurrentBuilds()
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '30',
+                artifactNumToKeepStr: '10'
+            )
+        )
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        PROJECT_PATH = 'DMNSN.Templates.NugetLibrary.Template.csproj'
+        PACKAGE_ID = 'DMNSN.Templates.NugetLibrary'
+        TEMPLATE_SHORT_NAME = 'dmnsn-lib'
+        ARTIFACT_DIR = 'artifacts'
+
+        NUGET_FEED_URL = 'https://api.nuget.org/v3/index.json'
+        NUGET_API_KEY = credentials('nuget-api-key')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    def scmVars = checkout scm
+                    env.GIT_COMMIT = scmVars.GIT_COMMIT
+                }
+            }
+        }
+
+        stage('Prepare') {
+            steps {
+                script {
+                    env.BASE_VERSION = sh(
+                        script: 'sed -n "s:.*<Version>\\(.*\\)</Version>.*:\\1:p" "$PROJECT_PATH" | head -1',
+                        returnStdout: true
+                    ).trim()
+
+                    if (!env.BASE_VERSION) {
+                        error("Could not read <Version> from ${env.PROJECT_PATH}.")
+                    }
+
+                    if (env.TAG_NAME) {
+                        def m = env.TAG_NAME =~ /^v(\d+\.\d+\.\d+)$/
+                        if (!m) {
+                            error("Tag '${env.TAG_NAME}' does not match the expected release pattern 'vX.Y.Z'.")
+                        }
+                        def tagVersion = m[0][1]
+                        if (tagVersion != env.BASE_VERSION) {
+                            error("Tag '${env.TAG_NAME}' does not match <Version> '${env.BASE_VERSION}' in ${env.PROJECT_PATH}. Bump the csproj and re-tag.")
+                        }
+                        env.BUILD_KIND = 'release'
+                        env.PACKAGE_VERSION = tagVersion
+                    } else if (env.BRANCH_NAME) {
+                        env.BUILD_KIND = 'develop'
+                        env.PACKAGE_VERSION = "${env.BASE_VERSION}-dev.${env.BUILD_NUMBER}"
+                    } else {
+                        error('Neither TAG_NAME nor BRANCH_NAME is set - this Jenkinsfile expects to run under a Multibranch tag or branch source.')
+                    }
+
+                    env.GIT_SHORT_SHA = sh(
+                        script: 'git rev-parse --short=8 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    currentBuild.displayName =
+                        "#${env.BUILD_NUMBER} ${env.BUILD_KIND} ${env.PACKAGE_VERSION} ${env.GIT_SHORT_SHA}"
+                }
+            }
+        }
+
+        stage('Pack') {
+            steps {
+                // The packaging project's own VerifyTemplateContent target runs AfterTargets="Pack"
+                // and fails here if .template.config/ or the template's .gitignore is missing from
+                // the produced .nupkg.
+                sh '''
+                    set -eu
+                    dotnet pack "$PROJECT_PATH" \
+                        --configuration Release \
+                        -p:Version="$PACKAGE_VERSION" \
+                        --output "$ARTIFACT_DIR"
+
+                    ls -l "$ARTIFACT_DIR"
+                '''
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                // Fast structural check, independent of the MSBuild target, so a failure here names
+                // its cause directly instead of surfacing later as a mysteriously broken scaffold.
+                sh '''
+                    set -eu
+
+                    NUPKG="$ARTIFACT_DIR/$PACKAGE_ID.$PACKAGE_VERSION.nupkg"
+                    test -f "$NUPKG"
+
+                    rm -rf "$ARTIFACT_DIR/verify"
+                    mkdir -p "$ARTIFACT_DIR/verify"
+                    unzip -q "$NUPKG" -d "$ARTIFACT_DIR/verify"
+
+                    for required in \
+                        "content/template/.template.config/template.json" \
+                        "content/template/.template.config/ide.host.json" \
+                        "content/template/.gitignore"
+                    do
+                        if [ ! -f "$ARTIFACT_DIR/verify/$required" ]; then
+                            echo "ERROR: $required missing from the packed template."
+                            exit 1
+                        fi
+                    done
+
+                    echo "Template pack structure verified."
+                '''
+            }
+        }
+
+        stage('Smoke') {
+            steps {
+                // Installs the pack that is about to be published and scaffolds from it for real.
+                // This is what makes the absence of a build/test stage above safe: the thing under
+                // test is the scaffolded OUTPUT, not the pack. It catches broken sourceName
+                // replacement, a broken --skip-cicd conditional, and output that does not compile -
+                // none of which a file-presence check can see.
+                sh '''
+                    set -eu
+
+                    SMOKE_DIR="$WORKSPACE/.smoke"
+                    rm -rf "$SMOKE_DIR"
+                    mkdir -p "$SMOKE_DIR"
+
+                    dotnet new install "$ARTIFACT_DIR/$PACKAGE_ID.$PACKAGE_VERSION.nupkg"
+
+                    dotnet new "$TEMPLATE_SHORT_NAME" -n Smoke.Widgets -o "$SMOKE_DIR/widgets"
+                    dotnet build "$SMOKE_DIR/widgets" -c Release
+                    dotnet test "$SMOKE_DIR/widgets" -c Release --no-build
+
+                    # The scaffolded output must not carry this repo's identity or agent files.
+                    if grep -rl "DMNSN.Templates.NugetLibrary" "$SMOKE_DIR/widgets" \
+                            --include="*.cs" --include="*.csproj" --include="*.slnx" 2>/dev/null \
+                        | grep -q .; then
+                        echo "ERROR: scaffolded output still references DMNSN.Templates.NugetLibrary."
+                        exit 1
+                    fi
+
+                    for leaked in CLAUDE.md GEMINI.md .codexrules .github docs; do
+                        if [ -e "$SMOKE_DIR/widgets/$leaked" ]; then
+                            echo "ERROR: $leaked leaked into the scaffolded output."
+                            exit 1
+                        fi
+                    done
+
+                    # --skipCicd must actually omit the pipeline. Note the flag is NOT kebab-cased:
+                    # dotnet new takes option names verbatim from the template.json symbol names.
+                    dotnet new "$TEMPLATE_SHORT_NAME" -n Smoke.NoCicd -o "$SMOKE_DIR/nocicd" --skipCicd
+                    if [ -d "$SMOKE_DIR/nocicd/cicd" ]; then
+                        echo "ERROR: --skipCicd still scaffolded cicd/."
+                        exit 1
+                    fi
+
+                    dotnet new uninstall "$PACKAGE_ID"
+
+                    echo "Smoke test passed: template installs, scaffolds, builds and tests."
+                '''
+            }
+        }
+
+        stage('Publish') {
+            steps {
+                sh '''
+                    set -eu
+
+                    if [ "$BUILD_KIND" = "release" ]; then
+                        echo "Pre-flight: checking $PACKAGE_ID $PACKAGE_VERSION is not already published"
+                        if dotnet package search "$PACKAGE_ID" \
+                                --exact-match \
+                                --source "$NUGET_FEED_URL" \
+                                --format json 2>/dev/null \
+                            | grep -q "\\"version\\"[[:space:]]*:[[:space:]]*\\"$PACKAGE_VERSION\\""; then
+                            echo "ERROR: $PACKAGE_ID $PACKAGE_VERSION already exists on $NUGET_FEED_URL."
+                            echo "Bump <Version> in $PROJECT_PATH and push a new tag."
+                            exit 1
+                        fi
+                    fi
+
+                    dotnet nuget push "$ARTIFACT_DIR"/*.nupkg \
+                        --source "$NUGET_FEED_URL" \
+                        --api-key "$NUGET_API_KEY" \
+                        --skip-duplicate
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'artifacts/*.nupkg',
+                             allowEmptyArchive: true,
+                             fingerprint: true
+            deleteDir()
+        }
+
+        success {
+            echo "Published ${env.PACKAGE_ID} ${env.PACKAGE_VERSION} to ${env.NUGET_FEED_URL}"
+        }
+
+        failure {
+            echo 'The template-pack pipeline failed. Check the failed stage above.'
+        }
+    }
+}

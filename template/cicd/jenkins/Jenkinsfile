@@ -1,0 +1,251 @@
+// Build/test/pack/publish pipeline for this library. Shared by two Jenkins jobs (declared in the
+// DMNSN.IaC.Jenkins repo): a release job that discovers only tags matching `vX.Y.Z`, and a develop
+// job that discovers only `feature/*` / `bugfix/*` branches. Which one triggered this build is
+// inferred from env.TAG_NAME vs env.BRANCH_NAME, the same idiom the DMNSN.IaC.BuildImages
+// per-image Jenkinsfiles use.
+//
+// The package version has exactly one source of truth: <Version> in the library csproj. This
+// pipeline never writes to the repository - no version-bump commit, no [skip ci] convention, and
+// no race between concurrent builds. That is what lets a freshly scaffolded library publish with
+// nothing but a NuGet API key.
+pipeline {
+    agent {
+        kubernetes {
+            defaultContainer 'dotnet'
+            // The pod is declared inline rather than referencing a cluster-wide pod template, so a
+            // scaffolded repo builds with no infrastructure change and pins its own SDK version.
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  # Uncomment if the Harbor project requires authentication to pull. The secret must be of type
+  # kubernetes.io/dockerconfigjson in the jenkins namespace - the existing
+  # harbor-build-images-credentials secret CANNOT be reused here, it is deliberately an Opaque
+  # secret with a config.json key for kaniko, and kubelet only accepts dockerconfigjson for pulls.
+  # imagePullSecrets:
+  #   - name: harbor-pull-credentials
+  containers:
+    - name: dotnet
+      image: harbor.dmnsn.com/build-images/dotnet10-sdk:latest
+      command: ['cat']
+      tty: true
+      resources:
+        requests:
+          cpu: '500m'
+          memory: '1Gi'
+        limits:
+          cpu: '2'
+          memory: '4Gi'
+      env:
+        - name: DOTNET_CLI_TELEMETRY_OPTOUT
+          value: '1'
+        - name: DOTNET_NOLOGO
+          value: '1'
+        - name: NUGET_PACKAGES
+          value: /home/jenkins/agent/.nuget/packages
+      volumeMounts:
+        - name: nuget-cache
+          mountPath: /home/jenkins/agent/.nuget/packages
+  volumes:
+    - name: nuget-cache
+      emptyDir: {}
+'''
+        }
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+        disableConcurrentBuilds()
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '30',
+                artifactNumToKeepStr: '10'
+            )
+        )
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        SOLUTION_PATH = 'DMNSN.Templates.NugetLibrary.slnx'
+        PROJECT_PATH = 'src/DMNSN.Templates.NugetLibrary/DMNSN.Templates.NugetLibrary.csproj'
+        PACKAGE_ID = 'DMNSN.Templates.NugetLibrary'
+        ARTIFACT_DIR = 'artifacts'
+
+        // Point these two at an internal feed (GitHub Packages, Nexus, Azure Artifacts) by editing
+        // the URL and creating a matching Jenkins secret-text credential. Nothing else changes.
+        NUGET_FEED_URL = 'https://api.nuget.org/v3/index.json'
+        NUGET_API_KEY = credentials('nuget-api-key')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    def scmVars = checkout scm
+                    env.GIT_COMMIT = scmVars.GIT_COMMIT
+                }
+            }
+        }
+
+        stage('Prepare') {
+            steps {
+                script {
+                    // <Version> in the csproj is the base version for both build kinds.
+                    env.BASE_VERSION = sh(
+                        script: 'sed -n "s:.*<Version>\\(.*\\)</Version>.*:\\1:p" "$PROJECT_PATH" | head -1',
+                        returnStdout: true
+                    ).trim()
+
+                    if (!env.BASE_VERSION) {
+                        error("Could not read <Version> from ${env.PROJECT_PATH}.")
+                    }
+
+                    // Check TAG_NAME first: some plugin versions also populate BRANCH_NAME with the
+                    // tag ref name on tag builds.
+                    if (env.TAG_NAME) {
+                        def m = env.TAG_NAME =~ /^v(\d+\.\d+\.\d+)$/
+                        if (!m) {
+                            error("Tag '${env.TAG_NAME}' does not match the expected release pattern 'vX.Y.Z'.")
+                        }
+                        def tagVersion = m[0][1]
+
+                        // Fail loudly rather than publishing a package whose version disagrees with
+                        // the tag that triggered it.
+                        if (tagVersion != env.BASE_VERSION) {
+                            error("Tag '${env.TAG_NAME}' does not match <Version> '${env.BASE_VERSION}' in ${env.PROJECT_PATH}. Bump the csproj and re-tag.")
+                        }
+
+                        env.BUILD_KIND = 'release'
+                        env.PACKAGE_VERSION = tagVersion
+                    } else if (env.BRANCH_NAME) {
+                        env.BUILD_KIND = 'develop'
+                        env.PACKAGE_VERSION = "${env.BASE_VERSION}-dev.${env.BUILD_NUMBER}"
+                    } else {
+                        error('Neither TAG_NAME nor BRANCH_NAME is set - this Jenkinsfile expects to run under a Multibranch tag or branch source.')
+                    }
+
+                    env.GIT_SHORT_SHA = sh(
+                        script: 'git rev-parse --short=8 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    currentBuild.displayName =
+                        "#${env.BUILD_NUMBER} ${env.BUILD_KIND} ${env.PACKAGE_VERSION} ${env.GIT_SHORT_SHA}"
+
+                    echo "Build kind:      ${env.BUILD_KIND}"
+                    echo "Package:         ${env.PACKAGE_ID} ${env.PACKAGE_VERSION}"
+                    echo "Feed:            ${env.NUGET_FEED_URL}"
+                }
+            }
+        }
+
+        stage('Restore') {
+            steps {
+                sh '''
+                    set -eu
+                    dotnet restore "$SOLUTION_PATH"
+                '''
+            }
+        }
+
+        stage('Build') {
+            steps {
+                // Version is passed here as well as to pack, so the compiled assembly's version
+                // metadata matches the package version instead of the bare csproj value.
+                sh '''
+                    set -eu
+                    dotnet build "$SOLUTION_PATH" \
+                        --configuration Release \
+                        --no-restore \
+                        -p:Version="$PACKAGE_VERSION"
+                '''
+            }
+        }
+
+        stage('Test') {
+            steps {
+                // A failing test fails the stage, which is the actual gate. The .trx is archived as
+                // a build artifact rather than published as a test report: this controller has no
+                // junit/mstest plugin installed (see plugins.txt in DMNSN.IaC.Kubernetes). Adding
+                // `junit` there would let this become a real `junit` step. Code coverage likewise
+                // needs a coverlet.collector PackageReference plus `--collect:"XPlat Code Coverage"`,
+                // and no coverage plugin exists to display it yet.
+                sh '''
+                    set -eu
+                    dotnet test "$SOLUTION_PATH" \
+                        --configuration Release \
+                        --no-build \
+                        --logger "trx;LogFileName=test-results.trx" \
+                        --results-directory "$ARTIFACT_DIR/test-results"
+                '''
+            }
+        }
+
+        stage('Pack') {
+            steps {
+                sh '''
+                    set -eu
+                    dotnet pack "$PROJECT_PATH" \
+                        --configuration Release \
+                        --no-build \
+                        -p:Version="$PACKAGE_VERSION" \
+                        --output "$ARTIFACT_DIR"
+
+                    ls -l "$ARTIFACT_DIR"
+                '''
+            }
+        }
+
+        stage('Publish') {
+            steps {
+                // Both jobs' discovery filters are the publish gate - a build only reaches this
+                // stage from a real release tag or develop branch, so there is no in-pipeline
+                // SHOULD_PUBLISH flag (same reasoning as the BuildImages pipelines).
+                //
+                // Two layers guard against republishing a version. The `dotnet package search`
+                // pre-flight gives a clear early failure on a release, but feed indexing lag means
+                // it can miss a version that was pushed moments ago - so --skip-duplicate is the
+                // actual idempotency guarantee for re-runs, not a substitute for the check.
+                sh '''
+                    set -eu
+
+                    if [ "$BUILD_KIND" = "release" ]; then
+                        echo "Pre-flight: checking $PACKAGE_ID $PACKAGE_VERSION is not already published"
+                        if dotnet package search "$PACKAGE_ID" \
+                                --exact-match \
+                                --source "$NUGET_FEED_URL" \
+                                --format json 2>/dev/null \
+                            | grep -q "\\"version\\"[[:space:]]*:[[:space:]]*\\"$PACKAGE_VERSION\\""; then
+                            echo "ERROR: $PACKAGE_ID $PACKAGE_VERSION already exists on $NUGET_FEED_URL."
+                            echo "Bump <Version> in $PROJECT_PATH and push a new tag."
+                            exit 1
+                        fi
+                    fi
+
+                    dotnet nuget push "$ARTIFACT_DIR"/*.nupkg \
+                        --source "$NUGET_FEED_URL" \
+                        --api-key "$NUGET_API_KEY" \
+                        --skip-duplicate
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'artifacts/**/*.nupkg, artifacts/test-results/**/*.trx',
+                             allowEmptyArchive: true,
+                             fingerprint: true
+            deleteDir()
+        }
+
+        success {
+            echo "Published ${env.PACKAGE_ID} ${env.PACKAGE_VERSION} to ${env.NUGET_FEED_URL}"
+        }
+
+        failure {
+            echo 'The publish pipeline failed. Check the failed stage above.'
+        }
+    }
+}

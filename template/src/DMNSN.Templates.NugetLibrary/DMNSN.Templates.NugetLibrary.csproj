@@ -23,7 +23,14 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Content Include="../../logo.ico" />
+		<!--
+		  Pack="false" is deliberate. As a plain <Content> item this landed in the package as both
+		  content/logo.ico and contentFiles/any/net10.0/logo.ico, which NuGet copies into every
+		  consuming project - a stray icon file appearing in unrelated solutions. The icon shown on
+		  the package page is PackageIcon/logo.png below; this entry only keeps the .ico beside the
+		  build output for anything that needs it locally.
+		-->
+		<Content Include="../../logo.ico" Pack="false" />
 	</ItemGroup>
 
 	<ItemGroup>
