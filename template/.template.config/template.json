@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "DevilDogTG",
+  "classifications": [ "Library", "NuGet", "DMNSN" ],
+  "identity": "DMNSN.Templates.NugetLibrary.CSharp",
+  "groupIdentity": "DMNSN.Templates.NugetLibrary",
+  "name": "DMNSN NuGet Library",
+  "description": "A DMNSN class library laid out for NuGet publication: src/, test/ (xUnit v3) and cicd/ with a ready-to-edit Jenkins pipeline that builds on the dotnet10-sdk builder image.",
+  "shortName": "dmnsn-lib",
+  "defaultName": "DMNSN.Library1",
+  "sourceName": "DMNSN.Templates.NugetLibrary",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "skipCicd": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "displayName": "Skip CI/CD pipeline",
+      "description": "Do not scaffold cicd/jenkins/Jenkinsfile. Use for libraries that will not be published through Jenkins."
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(skipCicd)",
+          "exclude": [ "cicd/**" ]
+        }
+      ]
+    }
+  ]
+}
