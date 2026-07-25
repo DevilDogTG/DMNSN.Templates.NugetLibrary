@@ -1,0 +1,76 @@
+// SEED job pipeline for this repository.
+//
+// It builds nothing. It applies every cicd/jenkins/jobs/**/*.groovy file via the Job DSL plugin,
+// creating or updating the real Jenkins jobs - which then each run cicd/jenkins/Jenkinsfile.
+//
+// READ THIS FIRST: this is the LOCAL seeding model, and it is an ALTERNATIVE to copying this repo's
+// job definitions into DMNSN.IaC.Jenkins. Do one or the other, never both - two seed jobs declaring
+// the same job paths will overwrite each other on every run, and silently diverge the moment one
+// copy is edited. See ../../README.md for the comparison and how to choose.
+//
+// Runs on the 'docker-builder' agent pod purely to get a workspace + git. The jobDsl step talks to
+// the Jenkins controller's job API directly and never touches the 'kaniko' container - which is why
+// this does not need the dotnet builder image the application pipelines use.
+pipeline {
+    agent {
+        label 'docker-builder'
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+        disableConcurrentBuilds()
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '20'
+            )
+        )
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Apply Job DSL') {
+            steps {
+                // targets is scoped to this repo's own jobs directory. It deliberately does NOT
+                // glob 'jobs/**' at the repo root - that path belongs to DMNSN.IaC.Jenkins, and a
+                // wider glob here would be the first step toward the two seed jobs fighting.
+                //
+                // removedJobAction IGNORE: a job whose .groovy file is deleted is left alone in
+                // Jenkins rather than auto-deleted. Matches the choice DMNSN.IaC.Jenkins made in
+                // its ADR 0001. Switching to DELETE makes this seed job authoritative enough to
+                // destroy job history, so it is a deliberate decision, not a default.
+                //
+                // sandbox true requires the authorize-project plugin AND a build authorization
+                // identity on this job - see README.md, step 4. Without it the build fails
+                // immediately with a message about the script not being approved.
+                jobDsl(
+                    targets: 'cicd/jenkins/jobs/**/*.groovy',
+                    removedJobAction: 'IGNORE',
+                    removedViewAction: 'IGNORE',
+                    sandbox: true
+                )
+            }
+        }
+
+        // Deliberately NO 'Update System Message' stage, unlike DMNSN.IaC.Jenkins's seed job. The
+        // controller has one global system message; a second seed job writing to it would fight the
+        // central one, and the last build to run would win. That message belongs to whichever repo
+        // owns the controller's presentation - not to an application repo.
+    }
+
+    post {
+        success {
+            echo 'Job definitions applied. Expect DMNSN > Templates > nugetlibrary > {release, develop}.'
+            echo 'Check this build\'s console output for the per-file Job DSL summary.'
+        }
+        failure {
+            echo 'Job DSL failed to apply - the console output above names the offending .groovy file and line.'
+            echo 'If it mentions script approval or a missing user identity, re-check README.md step 4 (authorize-project).'
+        }
+    }
+}
