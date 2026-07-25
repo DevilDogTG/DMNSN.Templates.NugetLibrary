@@ -1,0 +1,307 @@
+<!-- begin:framework -->
+# Centralized Brains: Codex Rules
+1. Read the global framework rules at `~\.agent-brains\GLOBAL_AGENT.md`.
+2. This workspace's project is `DevilDogTG/DMNSN.Templates.NugetLibrary` (derived from `git remote get-url origin` at
+   onboarding). Re-run the onboard script if the remote changes.
+3. Read the workspace directives at `~\.agent-brains\projects\DevilDogTG/DMNSN.Templates.NugetLibrary\AGENT.md`.
+4. Use `~\.agent-brains\projects\DevilDogTG/DMNSN.Templates.NugetLibrary\memory\` for project context.
+5. Always write plans to `~\.agent-brains\projects\DevilDogTG/DMNSN.Templates.NugetLibrary\plan\` BEFORE writing code.
+
+No agent state belongs in this repo. Only these entry points and `docs/adr/` live here.
+
+## Agent Brains Skill Invocation
+
+Treat `sk-<id>` as an Agent Brains framework skill invocation. These are shared framework skills,
+not provider-native Codex skills. Resolve them by reading the first matching file in this order:
+
+1. `~\.agent-brains\projects\DevilDogTG/DMNSN.Templates.NugetLibrary\skills\<id>\<id>.md`
+2. `~\.agent-brains\profiles\<active-profile>\skills\<id>\<id>.md`
+3. `~\.agent-brains\skills\<id>\<id>.md`
+
+Use the active profiles listed in `~\.agent-brains\projects\DevilDogTG/DMNSN.Templates.NugetLibrary\AGENT.md`. Strip YAML
+frontmatter, execute the `## Procedure` section, and do not rely on the generated skill registry as
+the procedure source.
+
+On the first user message of a new Codex session, run `sk-session-start` before handling the user's
+task. If a user explicitly writes any `sk-*` token, that explicit skill invocation wins.
+
+
+## Automatic Skill Routing
+
+When the user's request clearly matches a session workflow, execute the matching framework skill as if
+they had typed the explicit `sk-...` token.
+
+Use this v1 routing table:
+- First user message in a new session, "start session", "resume work", "pick up where we left off"
+  -> `session-start`
+- "summarize this session", "what did we do?", "give me a recap"
+  -> `session-summary`
+- "end session", "close session", "we're done", "continue later", "handover"
+  -> `session-end`
+
+Rules:
+- Only auto-route when the intent is unambiguous.
+- Prefer the least side-effecting skill that satisfies the request.
+- Do not route recap-only requests to `session-end`.
+- If the user's wording is ambiguous, ask instead of guessing.
+- If the user explicitly writes an `sk-*` token, that explicit invocation wins.
+<!-- end:framework -->
+
+<!-- SKILLS:START -->
+<!-- Last updated: 2026-07-24 | Source: global + profile:base-developer + workspace -->
+
+## Available Skills
+
+> These skills are available in this session. Invoke them by name when the described context applies.
+
+### adr-writer - Architecture Decision Record Writer
+**Invoke when:** Use this skill when a significant architectural or design decision needs to be documented a new integration, a technology choice, a pattern adoption, a deliberate trade-off, or a decision to *not* do something. ADRs make future reasoning auditable; they answer "why is it this way?" without relying on chat history or institutional memory. Invoke when: - Choosing between two or more non-trivial approaches. - Adopting or retiring a library, framework, or pattern. - Accepting a known trade-off or constraint. - Rejecting an approach that looks obvious but was ruled out for a real reason. Do not invoke for trivial implementation choices ADRs document decisions that would be hard to reverse or that others need to understand to maintain the system.
+**Steps:**
+1. Assign a Number and Title
+2. Gather Context
+3. Document Options
+4. State the Decision
+5. Record Consequences
+6. Write the ADR File
+7. Update Memory and Backlog
+
+### agent-validator - AGENT.md Validator
+**Invoke when:** Use this skill whenever you create or update an `AGENT.md` file to ensure it follows the framework's hierarchical standards.
+**Steps:**
+1. Check for Frontmatter: Ensure the file starts and ends the first section with `---`.
+2. Verify Required Fields:
+3. Automated Check (Python):
+
+### brains-migrate - Brains Migrate
+**Invoke when:** Use when the skill name matches the task.
+**Steps:**
+1. Confirm prerequisites.
+2. Detect the platform and locate the companion script:
+3. Run the migration (from inside the workspace, or pass the path):
+4. Review and correct statuses. Phase 1 defaults migrated plans to `status: active`; Phase 2
+5. (Optional) Fold legacy changelog into entries. Move hand-written "Recent Changes" prose into
+6. Commit. Stage the migrated `.agent-brains/` files and any `.bak.*` backups (or delete them).
+
+### code-review - Code Review
+**Invoke when:** Use this skill to review a diff, PR, branch, or set of files against the framework's active profile rules. It produces a structured findings report categorized by severity. Invoke it before approving a PR, after completing a feature, or when asked to review someone else's code.
+**Steps:**
+1. Identify Scope
+2. Check Scope Discipline
+3. Check Breaking Changes
+4. Check Security
+5. Check Code Quality
+6. Check Tests
+7. Check PR Description
+8. Produce Review Report
+
+### dependency-audit - Dependency Audit
+**Invoke when:** Use this skill to audit the workspace's dependencies for: outdated packages, known CVEs, license conflicts, and unnecessary or duplicated packages. Run it before cutting a release branch, after a bulk upgrade, or when the user asks "are our dependencies healthy?". This skill reports findings and proposes upgrades it does not apply changes automatically. All upgrades require user confirmation.
+**Steps:**
+1. Scan the workspace for dependency manifests:
+2. List every manifest found and the total dependency count. If none found, stop and ask the user to specify the manifest location.
+3. Run the appropriate outdated-check command per ecosystem:
+4. Categorize outdated packages:
+5. Run security audit per ecosystem:
+6. Categorize by severity: critical, high, medium, low.
+7. Identify licenses for direct dependencies (transitive where tooling allows):
+8. Flag any license incompatible with the project's own license or with commercial use:
+9. Identify candidates for removal:
+10. Note duplicated packages (same logical library under two different names/versions).
+11. Produce the audit report using the template below.
+12. Present findings to the user grouped by severity. Propose a remediation order:
+13. For each proposed change, wait for user confirmation before running any upgrade command.
+14. After confirmed upgrades: re-run the test gate (`test-gate` skill) before committing.
+
+### feature-finish - Feature Finish
+**Invoke when:** Use when the skill name matches the task.
+**Steps:**
+1. Invoke `finish-feature`
+
+### finish-feature - Finish Feature
+**Invoke when:** Use this skill when: - The current branch's work is meant to be **landed**. - The user says things like "finish this feature", "ship this branch", "merge this", or equivalent close-and-land language. Use `session-end` instead when: - The user is parking work for later. - The user wants a handover memo and updated plan state, but **not** a merge yet.
+**Steps:**
+1. Inspect repository context
+2. Confirm this is a feature-close request
+3. Local-only repo (`git-scm`)
+4. GitHub repo (`github-scm`)
+5. GitLab repo (`gitlab-scm`)
+6. Summarize the chosen path
+
+### grill - Grill Before Designing
+**Invoke when:** Enforces the 3 "Grill before designing" rule: before proposing a design or writing code for a non-trivial or ambiguous request, interrogate the request until you and the user are demonstrably on the same page. The goal is **shared understanding**, not a fixed number of question rounds.
+**Steps:**
+1. Frame what you already understand.
+2. Probe until aligned targeted questions, one dimension at a time.
+3. Exit criteria stop grilling when EITHER:
+4. Restate and confirm.
+5. Record the outcome.
+
+### onboard-audit - Onboard Audit
+**Invoke when:** Use this skill when you need to confirm a workspace has not drifted from the framework for example after the framework has been updated, before a release, or when a workspace was onboarded long ago and its provider entry points may be stale. It complements `onboarding-checklist` (which validates a *fresh* onboarding) and `agent-validator` (which validates AGENT.md frontmatter): onboard-audit focuses on **drift detection** across the whole onboarded surface. This skill is **read-only**. It never edits, moves, or deletes files; it only reports. Remediation is always "re-run the onboard script" which non-destructively refreshes the sentinel blocks while preserving user content. Frontmatter validation here is intentionally lightweight (no Python dependency); for deep frontmatter validation, delegate to the `agent-validator` skill.
+**Steps:**
+1. Detect the platform and locate the companion script.
+2. Run the audit against the target workspace.
+3. Interpret the exit code and status table.
+4. Produce the dated report (see Template) summarising the run for the user.
+5. Recommend remediation never auto-fix.
+
+### onboarding-checklist - Onboarding Checklist
+**Invoke when:** Run this skill when a new contributor human or agent starts working in a project for the first time, or when setting up a development environment from scratch. It verifies that the workspace is correctly configured, secrets are not exposed, the framework is wired up, and the test suite is green before any real work begins. Invoke when the user says "set me up", "I'm new to this project", "bootstrap my environment", or when `session-start` detects no prior memory for this workspace.
+**Steps:**
+1. Resolve the project and verify its brain exists (Global 2):
+2. Read the project's `AGENT.md` (`~/.agent-brains/projects/<key>/AGENT.md`):
+3. Check for a provider entry point (e.g., `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`):
+4. Collect the merged skill set following the discovery load order (Global 2.1):
+5. Extract injection content for each skill:
+6. Locate the provider entry point file:
+7. Write or replace the skill registry block in the entry point file.
+8. Confirm with the user before writing:
+9. Re-run injection whenever skills change (new skill added, skill updated, active profile changed). The `session-end` skill surfaces this as a learning candidate when it detects skill file changes.
+10. Verify git is initialized:
+11. Check git identity:
+12. Check remote and SCM profile:
+13. Check branch:
+14. Scan for hardcoded secrets:
+15. Check `.gitignore`:
+16. Verify environment variables:
+17. Build the project:
+18. Run the test suite:
+19. Check the project's `memory/overview.md`:
+20. Check the project's `plan/backlog.md`:
+21. Produce a checklist summary showing pass / fail / skipped for each item.
+22. State clearly whether the workspace is ready for work, and list any outstanding items that must be resolved first.
+
+### profile-initializer - Profile Initializer
+**Invoke when:** Use this skill when you need to create a new domain-specific profile (e.g., `python-developer`) in the global framework directory.
+**Steps:**
+1. Setup Directory: Create the profile folder under `[root-framework-directory]/profiles/[profile-name]/`.
+2. Create Subdirectories:
+3. Initialize AGENT.md:
+4. Bootstrap Memory & Plan:
+5. Validation: Verify that all files exist and the `AGENT.md` follows the established hierarchy.
+
+### project-handover - project-handover
+**Invoke when:** Use this skill when concluding a significant work session or when preparing the workspace for a new agent to take over.
+**Steps:**
+1. State Audit:
+2. Synchronize Memory:
+3. Refine Backlog (generated do not hand-edit `backlog.md`):
+4. Generate Handover Memo:
+5. Final Validation:
+
+### project-initializer - project-initializer
+**Invoke when:** Use when the skill name matches the task.
+**Steps:**
+1. ### 1. Workspace Analysis - Scan root for tech stack and existing framework components. - If `.agent-brains/` still exists in the workspace, it predates ADR-0003. Run the `brains-migrate` skill (phase 3) **before** onboarding, or its contents will be stranded. ### 2. Run Onboard Script The canonical way to bootstrap is to run the onboard script from the Brains repo: - **Linux/macOS**: `bash <brains-repo>/src/scripts/onboard/onboard.sh` - **Windows**: `<brains-repo>\src\scripts\onboard\onboard.ps1` Provider entry points default to **Yes** on Enter. To skip one at invocation time, pass an opt-out flag such as `-ExM365`. Override the resolved project key with `ONBOARD_PROJECT_KEY=<key>`. This handles everything below automatically. The rest of this document describes what it does, for review or for when scripting is unavailable. ### 3. Profile Mapping - Match global profiles from `~/.agent-brains/profiles/`. - Default profile: `base-developer`. - **SCM profile:** the onboard script detects the git remote automatically: - No remote `git-scm` - `github.com` remote `github-scm` - `gitlab` remote `gitlab-scm` - Unknown remote `git-scm` + warning - **Language profiles:** the onboard script scans project files and adds matching profiles: | Signature found | Profile added | |---|---| | `*.csproj`, `*.sln`, `*.fsproj` | `csharp-developer` | | `*.psm1`, `*.psd1`, or root `*.ps1` | `powershell-script` | | `Chart.yaml`, `.helmignore`, `k8s/`, `kubernetes/` | `kubernetes-devops` | If none match, only `base-developer` is used. Users can add profiles manually. - **Profile order in AGENT.md:** `base-developer` language profiles `git-scm` remote SCM profile. ### 4. Bootstrap the project AGENT.md File: `~/.agent-brains/projects/<project-key>/AGENT.md` ```markdown --- version: 1.0 profiles: - base-developer strict_override: false --- # Workspace Instructions
+
+### search-memory - Search Memory
+**Invoke when:** Recall across **every** project in the global brain, not just the one you are working in. `session-start` loads only the current project (Global 2), which keeps sessions cheap. This skill is the deliberate escape hatch for when the answer lives somewhere else. Typical trigger intent: - "did we solve this before?" - "have I hit this error in another repo?" - "where did I write down the decision about X?" - "what's active across all my projects?" read `~/.agent-brains/projects/INDEX.md` instead; it is a generated board and costs one file read.
+**Steps:**
+1. Locate the script.
+2. Run it.
+3. Report findings with their source. Always cite `project file:line`. A recalled memory reflects
+
+### session-end - Session End
+**Invoke when:** Execute this skill at the close of every work session. It summarizes what happened, updates all plan and report files, extracts learnings worth persisting, prompts the user to promote valuable discoveries up the rule/memory/skill hierarchy, runs a git hygiene check, and produces a handover memo. This is the counterpart to `session-start`. Do not skip this skill when the user says "we're done for now", "continue later", or "close the session". Do not use this skill for recap-only requests like "summarize this session" or "what did we do?" those belong to `session-summary`. If the user intends to **ship / merge / land** the current branch, use `finish-feature` instead. `session-end` closes the session state; it does not assume the feature is being merged now.
+**Steps:**
+1. Summarize the session in 3 7 bullet points:
+2. Update the active plan file (`$PLAN/master-plan.md`):
+3. Update the plan indexes `INDEX.md` (full registry, all statuses) and `backlog.md` (active
+4. Check plan lifecycle (no-archive lifecycle Global 4.5):
+5. Identify undocumented decisions:
+6. Extract learnings from the session:
+7. Verify the escalation target for each confirmed candidate before writing:
+8. Apply confirmed updates:
+9. Suggest promotion for workspace-level items that may have broader value:
+10. Check git state:
+11. Update memory:
+12. Write the Handover Memo to `~/.agent-brains/projects/<project-key>/handover/[YYYY-MM-DD].md` using the template below.
+13. Commit and push the brains repo (no confirmation needed these are framework artifacts):
+14. Handle uncommitted workspace changes (from Phase 5) this is a safety net, not the
+
+### session-start - Session Start
+**Invoke when:** Execute this skill at the beginning of every work session before writing any code or making any changes. It resolves which **project** this workspace belongs to, loads that project's context, surfaces stale plans, and aligns with the user on the session's direction. This is the counterpart to `project-handover` handover closes a session; session-start opens one. Typical trigger intent: - first user message in a new session - "start session" - "resume work" - "pick up where we left off"
+**Steps:**
+1. Resolve the project (Global 2). Do this first every later step reads from the project folder.
+2. Report Loaded Context
+3. Load Memory
+4. Load Plans
+5. Surface Stale Plans
+6. Report Current State
+7. Confirm Session Direction
+8. Prepare the Active Plan
+
+### session-summary - Session Summary
+**Invoke when:** Execute this skill when the user wants a recap of the current or recent session **without** closing the session. This skill is read-only: it summarizes work, decisions, and blockers, but it does not perform handover, plan lifecycle changes, git hygiene steps, or commits. Use this skill for requests like: - "summarize this session" - "what did we do?" - "give me a recap before we continue" If the user is explicitly ending work for now, use `session-end` instead.
+**Steps:**
+1. Summarize the session in 3-7 bullet points:
+2. Call out current state in 1-3 bullets:
+3. Do not mutate workspace state:
+
+### skill-list - skill-list
+**Invoke when:** Use when the skill name matches the task.
+**Steps:**
+1. Read the skill file and execute its Procedure section.
+
+### skill-unique-id - Human Readable Name
+**Invoke when:** Use this skill to perform atomic, well-documented git commits.
+**Steps:**
+1. Stage changes.
+2. Generate a message following Conventional Commits.
+3. Run `git commit`.
+
+### spike-report - Spike Report
+**Invoke when:** Use this skill when a session is exploratory rather than delivery-focused evaluating a library, investigating a bug's root cause, researching an approach before committing to it, or answering a "how should we do X?" question. It time-boxes the research, forces a structured output, and writes findings to memory so the work survives session boundaries. Invoke when the user says "investigate", "research", "spike on", "evaluate options for", or "figure out why". A spike produces a report, not code. If the outcome is a decision, follow up with `adr-writer`.
+**Steps:**
+1. Confirm the question with the user in one sentence:
+2. Set a timebox: agree on how deep to go before surfacing findings. Default: one session. Record it in the spike plan entry.
+3. Create a spike plan entry in `backlog.md`:
+4. Search the codebase first existing implementations, related patterns, prior decisions in the product repo's `docs/adr/`.
+5. Search external sources (docs, issues, benchmarks) as needed. Prefer primary sources (official docs, RFCs, source code) over blog posts.
+6. Keep a running scratchpad of raw findings as you go don't synthesize yet. Note source for each finding.
+7. Stop at the timebox boundary even if the picture is incomplete. Incomplete findings with honest confidence levels are more useful than delayed perfect ones.
+8. Write the spike report to `~/.agent-brains/projects/<project-key>/memory/spikes/[slug].md` using the template below.
+9. Update `backlog.md`: mark the spike entry `[x]` and link the report file.
+10. Present the report summary to the user and ask:
+
+### test-gate - Test Gate
+**Invoke when:** Run this skill before any commit, before opening a PR, and as a step in `session-end`. It detects the workspace's test framework(s), runs the suite, and blocks forward progress if tests fail. A session must not close with a red test suite unless the user explicitly accepts the risk and the reason is logged. Invoke standalone when asked to "verify tests", "run the test suite", or "check nothing is broken".
+**Steps:**
+1. Scan the workspace for test manifests and framework indicators:
+2. Note every distinct test suite found. If none detected, report it and ask the user to point to the test entry point before continuing.
+3. Run each detected suite using its idiomatic command:
+4. Capture: total tests, passed, failed, skipped, and any error output.
+5. If all suites pass:
+6. If any suite fails:
+7. Write a one-line gate result to the active plan file's progress log:
+
+### github-actions-pipeline - GitHub Actions Pipeline
+**Invoke when:** Use this skill to automate the validation of pull requests and main branch updates.
+**Steps:**
+1. Create directory: `mkdir -p .github/workflows`
+2. Create file: `.github/workflows/ci.yml`
+3. Use the template below.
+
+### readme-template - README.md Template
+**Invoke when:** Use this skill when initializing a project to ensure essential information is documented from day one.
+**Steps:**
+1. Copy the template below.
+2. Replace the bracketed placeholders with project-specific details.
+3. Ensure the `Getting Started` section reflects the actual environment setup.
+
+### shell-script-boilerplate - Shell Script Boilerplate
+**Invoke when:** Use this skill when starting a new automation script to ensure proper error handling and portability.
+**Steps:**
+1. Use the Template: Copy the template below into your new `.sh` file.
+2. Set Permissions: Run `chmod +x your-script.sh`.
+3. Verify Shell: Ensure the shebang `#!/usr/bin/env bash` is appropriate for the target environment.
+
+### standard-commit - standard-commit
+**Invoke when:** Use this skill when preparing to commit changes. It follows the Conventional Commits specification.
+**Steps:**
+1. Analyze Changes: Run `git status` and `git diff --staged` to understand the scope of work.
+2. Determine Type: Choose the appropriate prefix:
+3. Draft Message:
+4. Execution:
+
+<!-- SKILLS:END -->
