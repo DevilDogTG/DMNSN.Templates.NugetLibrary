@@ -33,11 +33,11 @@ to its cause.
 | 6 | `nuget-api-key` credential (secret text) | Jenkins → Credentials | Jobs build and then fail in the Publish stage |
 | 7 | Harbor pull access for `build-images/dotnet10-sdk` from the `jenkins` namespace | Harbor project visibility, or a `kubernetes.io/dockerconfigjson` secret | Build pods `ImagePullBackOff` |
 
-Prerequisite 7 has a trap worth knowing: the `harbor-build-images-credentials` secret that already
+Prerequisite 7 has a trap worth knowing: the `harbor-credentials` secret that already
 exists **cannot** be reused. It is deliberately an `Opaque` secret with a `config.json` key so kaniko
 can read it, and kubelet accepts only `kubernetes.io/dockerconfigjson` for image pulls. Either make
-the Harbor project allow anonymous pull, or create a separate dockerconfigjson secret and uncomment
-`imagePullSecrets` in `../Jenkinsfile`.
+the Harbor project allow anonymous pull, or create a `harbor-pull-credentials` dockerconfigjson secret
+and uncomment `imagePullSecrets` in `../Jenkinsfile`.
 
 ## Steps
 
