@@ -120,8 +120,9 @@ was built for a second feed that does not exist yet.
 - Harbor pull access from the `jenkins` namespace: either anonymous pull on the `build-images`
   project, or a `kubernetes.io/dockerconfigjson` secret plus uncommenting `imagePullSecrets`.
 - The `nuget-api-key` Jenkins credential.
-- ~~Copying the Job DSL pair into `DMNSN.IaC.Jenkins`~~ — **superseded by
-  [ADR 0003](0003-per-repo-seed-jobs.md)**, which gives this repo and every scaffolded library its own
-  seed job instead, removing the two-copy drift risk this follow-up originally accepted. The remaining
-  work is the one-time seed-job bootstrap in `cicd/jenkins/seed/README.md`.
+- ~~Copying the Job DSL pair into `DMNSN.IaC.Jenkins`~~ — superseded by
+  [ADR 0003](0003-per-repo-seed-jobs.md), which gave this repo and every scaffolded library its own
+  seed job instead — **then itself narrowed by [ADR 0004](0004-central-seed-job-for-pack-pipeline.md)**,
+  which moved this repo's own Job DSL pair into `DMNSN.IaC.Jenkins` after all. Scaffolded libraries
+  are unaffected and still follow ADR 0003.
 - Code coverage, which needs a `coverlet.collector` reference and a plugin able to display it.

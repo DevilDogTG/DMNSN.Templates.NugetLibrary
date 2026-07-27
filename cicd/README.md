@@ -5,61 +5,48 @@ that lives under `template/cicd/` and is a separate, similar set of files.
 
 ```text
 cicd/jenkins/
-├── Jenkinsfile          the pipeline: pack → verify → smoke → publish
-├── jobs/                which Jenkins jobs exist (release + develop pair)
-│   └── README.md
-└── seed/
-    ├── Jenkinsfile      applies jobs/**/*.groovy via Job DSL
-    └── README.md        one-time manual bootstrap
+└── Jenkinsfile          the pipeline: pack → verify → smoke → publish
 ```
 
 Three layers, and it is worth being clear about which does what, because they are easy to conflate:
 
 | Layer | Answers | File |
 |---|---|---|
-| Seed | "which job definitions get applied?" | `jenkins/seed/Jenkinsfile` |
-| Jobs | "which jobs exist, and what triggers them?" | `jenkins/jobs/*.groovy` |
+| Seed | "which job definitions get applied?" | `DMNSN.IaC.Jenkins/Jenkinsfile` |
+| Jobs | "which jobs exist, and what triggers them?" | `DMNSN.IaC.Jenkins/jobs/DMNSN/Templates/nugetlibrary_{release,develop}.groovy` |
 | Pipeline | "what does a build actually do?" | `jenkins/Jenkinsfile` |
 
 A change to a lower layer has no effect until the layer above runs. Editing `jobs/*.groovy` does
 nothing until the seed job runs; that is the most common cause of "I changed the filter and nothing
 happened".
 
-## Seeding: local, per repository
+## Seeding: central, via DMNSN.IaC.Jenkins
 
-**This repo seeds its own jobs.** Create a seed job for it per
-[`jenkins/seed/README.md`](jenkins/seed/README.md); nothing is copied into `DMNSN.IaC.Jenkins`. The
-same arrangement ships inside the template, so every scaffolded library is self-contained too — the
-modular model, chosen deliberately over central registration.
+**This repo's own pipeline is seeded centrally.** Job definitions for `release`/`develop` live in
+`DMNSN.IaC.Jenkins/jobs/DMNSN/Templates/nugetlibrary_{release,develop}.groovy` and are applied by that
+repo's single controller-wide seed job — nothing job-dsl-related lives under `cicd/jenkins/` here
+beyond the pipeline itself. See
+[`docs/adr/0004-central-seed-job-for-pack-pipeline.md`](../docs/adr/0004-central-seed-job-for-pack-pipeline.md)
+for why.
 
-Why: a branch filter and a `scriptPath` only mean anything against a specific `Jenkinsfile`. Keeping
-them in the same repo means one copy of each file and a filter change shipping in the same commit as
-the pipeline change it belongs with.
+Treat the copy in `DMNSN.IaC.Jenkins` as authoritative: a branch filter or `scriptPath` change there
+takes effect the next time its seed job runs, and there is no copy of the `.groovy` files in this repo
+to fall out of sync.
 
-Accepted cost: **one hand-bootstrapped seed job per repository**, and no single place listing every job
-on the controller. Create a shared `_seeds` folder in Jenkins and put every repo's seed job in it, or
-the root fills up with seed jobs interleaved with real ones.
+**Scaffolded libraries are different.** Every library scaffolded from this template still self-seeds
+via `template/cicd/jenkins/seed/`, per ADR 0003 (as narrowed by ADR 0004, which applies only to this
+pack's own pipeline). The two models legitimately coexist across the repo family — which one applies
+depends on which repo you're looking at.
 
-### The central alternative
+### Never both, for the same job path
 
-Job definitions can instead be copied into `DMNSN.IaC.Jenkins/jobs/DMNSN/Templates/` and applied by its
-single controller-wide seed job — the older convention, and it does give one place to audit every job.
-`jenkins/jobs/README.md` documents that route, since the files are ready to copy either way.
+Central and local seeding must never both declare the same job paths — run both against
+`DMNSN/Templates/nugetlibrary/{release,develop}` and each seed job would reconfigure the other's jobs
+on every build. That risk doesn't exist within this repo any more (only the central model governs its
+own jobs now), but it's still the reason scaffolded libraries use a disjoint path
+(`DMNSN/<ProjectName>/...`) rather than sharing this one.
 
-Its cost is the mirror image: two copies of each `.groovy` file with nothing keeping them in sync. If
-you go that way, treat the copy in `DMNSN.IaC.Jenkins` as authoritative.
-
-### Never both
-
-Both models declare the same job paths (`DMNSN/Templates/nugetlibrary/{release,develop}`). Run both
-and each seed job reconfigures the other's jobs on every build. While the two `.groovy` copies stay
-byte-identical this is invisible — which is exactly the problem. The first edit to one copy turns it
-into jobs that silently flip configuration depending on which seed job ran last, and the symptom
-(a filter that "sometimes" works) is genuinely hard to trace back here.
-
-Pick one, and delete or clearly mark the other path.
-
-## Prerequisites for either model
+## Prerequisites
 
 - `github-pat` — username/password credential (a PAT), used for both API discovery and HTTPS checkout.
 - `nuget-api-key` — secret-text credential, read by `jenkins/Jenkinsfile`.
