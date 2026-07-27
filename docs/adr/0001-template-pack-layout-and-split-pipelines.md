@@ -78,7 +78,7 @@ image instead of depending on one chosen cluster-wide. The JCasC currently decla
 template, `docker-builder`, containing only a kaniko container — nothing could run `dotnet` at all.
 
 `imagePullSecrets` is present but commented out, with the reason recorded inline: the existing
-`harbor-build-images-credentials` secret **cannot** be reused for image pulls. It is deliberately an
+`harbor-credentials` secret **cannot** be reused for image pulls. It is deliberately an
 `Opaque` secret with a `config.json` key so kaniko can read it, and kubelet accepts only
 `kubernetes.io/dockerconfigjson` for pulls.
 

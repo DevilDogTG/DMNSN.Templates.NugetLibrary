@@ -19,9 +19,9 @@ apiVersion: v1
 kind: Pod
 spec:
   # Uncomment if the Harbor project requires authentication to pull. The secret must be of type
-  # kubernetes.io/dockerconfigjson in the jenkins namespace - the existing
-  # harbor-build-images-credentials secret CANNOT be reused here, it is deliberately an Opaque
-  # secret with a config.json key for kaniko, and kubelet only accepts dockerconfigjson for pulls.
+  # kubernetes.io/dockerconfigjson in the jenkins namespace - the existing harbor-credentials
+  # secret CANNOT be reused here, it is deliberately an Opaque secret with a config.json key for
+  # kaniko, and kubelet only accepts dockerconfigjson for pulls.
   # imagePullSecrets:
   #   - name: harbor-pull-credentials
   containers:

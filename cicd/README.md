@@ -50,10 +50,11 @@ own jobs now), but it's still the reason scaffolded libraries use a disjoint pat
 
 - `github-pat` — username/password credential (a PAT), used for both API discovery and HTTPS checkout.
 - `nuget-api-key` — secret-text credential, read by `jenkins/Jenkinsfile`.
-- Harbor pull access for `build-images/dotnet10-sdk` from the `jenkins` namespace. The existing
-  `harbor-build-images-credentials` secret **cannot** be reused: it is deliberately `Opaque` with a
+- Harbor pull access for `build-images/dotnet10-sdk` from the `jenkins` namespace, via the
+  `harbor-pull-credentials` secret (`kubernetes.io/dockerconfigjson`) — the existing
+  `harbor-credentials` secret **cannot** be reused: it is deliberately `Opaque` with a
   `config.json` key so kaniko can read it, and kubelet accepts only `kubernetes.io/dockerconfigjson`
-  for image pulls. Either allow anonymous pull on the Harbor project, or create a dockerconfigjson
-  secret and uncomment `imagePullSecrets` in `jenkins/Jenkinsfile`.
+  for image pulls. `jenkins/Jenkinsfile`'s `imagePullSecrets` already references
+  `harbor-pull-credentials`.
 
-Neither credential existed at the time of writing. See `docs/adr/0001`, Follow-ups.
+See `docs/adr/0001`, Follow-ups.
