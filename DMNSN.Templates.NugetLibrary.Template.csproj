@@ -84,7 +84,7 @@
 	<Target Name="VerifyTemplateContent" AfterTargets="Pack">
 		<PropertyGroup>
 			<_PackVerifyDir>$(IntermediateOutputPath)packverify\</_PackVerifyDir>
-			<_PackVerifyNupkg>$(PackageOutputPath)$(PackageId).$(PackageVersion).nupkg</_PackVerifyNupkg>
+			<_PackVerifyNupkg>$([System.IO.Path]::Combine('$(PackageOutputPath)', '$(PackageId).$(PackageVersion).nupkg'))</_PackVerifyNupkg>
 		</PropertyGroup>
 
 		<Error Condition="!Exists('$(_PackVerifyNupkg)')"
