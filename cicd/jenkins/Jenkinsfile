@@ -258,7 +258,10 @@ spec:
             archiveArtifacts artifacts: 'artifacts/*.nupkg',
                              allowEmptyArchive: true,
                              fingerprint: true
-            deleteDir()
+            // deleteDir() runs via the Jenkins agent's own JVM (the jnlp container), not inside
+            // 'dotnet' - it can't remove files dotnet pack created under a different UID, and fails
+            // with "Operation not permitted". Clean up via a sh step in the same container instead.
+            sh 'rm -rf "${WORKSPACE:?}"/* "${WORKSPACE:?}"/.[!.]* 2>/dev/null || true'
         }
 
         success {
