@@ -20,8 +20,8 @@ kind: Pod
 spec:
   # See template/cicd/jenkins/Jenkinsfile for why harbor-build-images-credentials cannot be
   # reused as an imagePullSecret. Uncomment if the Harbor project requires authentication.
-  # imagePullSecrets:
-  #   - name: harbor-pull-credentials
+  imagePullSecrets:
+    - name: harbor-build-images-credentials
   containers:
     - name: dotnet
       image: harbor.dmnsn.com/build-images/dotnet10-sdk:latest
