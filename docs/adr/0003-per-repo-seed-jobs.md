@@ -7,6 +7,12 @@ Accepted — 2026-07-25. Applies to this repository **and** to every library sca
 Partially diverges from `DMNSN.IaC.Jenkins` ADR 0001's central seed-job model. That model is not
 withdrawn — it remains valid, and `cicd/jenkins/jobs/README.md` documents how to use it instead.
 
+**Narrowed by [ADR 0004](0004-central-seed-job-for-pack-pipeline.md) (2026-07-27):** the
+self-seeding decision below no longer applies to this repository's own pack-pipeline seed job —
+only to every library scaffolded from it. `cicd/jenkins/seed/` and `cicd/jenkins/jobs/` referenced
+below have been removed from this repo; the rest of this ADR remains the historical record of what
+was decided and why.
+
 ## Context
 
 `DMNSN.IaC.Jenkins` establishes a single controller-wide seed job: application repos own their
