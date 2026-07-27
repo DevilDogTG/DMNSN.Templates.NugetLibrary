@@ -85,6 +85,10 @@ spec:
                     def scmVars = checkout scm
                     env.GIT_COMMIT = scmVars.GIT_COMMIT
                 }
+                // checkout runs outside the 'dotnet' container (JENKINS-30600 launcher warning), so
+                // the workspace ends up owned by a different UID than later `sh` steps run as. Without
+                // this, `git rev-parse` etc. in Prepare fail with "detected dubious ownership".
+                sh 'git config --global --add safe.directory "$WORKSPACE"'
             }
         }
 
